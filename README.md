@@ -2,6 +2,21 @@
 
 Encode any file into a QR code video. Decode it back — even after compression.
 
+## Installation
+
+### Arch Linux (AUR)
+```bash
+yay -S qrdv
+# or
+paru -S qrdv
+```
+
+### From Source
+
+```bash
+cargo build --release
+```
+
 ## Usage
 
 ```bash
