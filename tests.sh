@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─── Config ──────────────────────────────────────────────────────────────────
-QRDV=$(command -v ./target/debug/qrdv || command -v ./target/release/qrdv)
+QRDV="./qrdv"
 TMP=$(mktemp -d)
 PASS=0
 FAIL=0
@@ -74,7 +74,7 @@ header "Preflight"
 
 if [[ ! -x "$QRDV" ]]; then
     echo -e "${RED}Error: $QRDV not found or not executable${RESET}"
-    echo "Run: cargo build --release"
+    echo "Run: cargo build --release && cp target/release/qrdv ."
     exit 1
 fi
 pass "binary exists"
