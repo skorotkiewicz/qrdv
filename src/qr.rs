@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use image::{GrayImage, Luma};
 use qrcode::QrCode;
@@ -70,7 +70,8 @@ pub fn decode_qr_image(img: &GrayImage) -> Result<Vec<u8>> {
         .map_err(|e| anyhow::anyhow!("Failed to decode QR code: {:?}", e))?;
 
     // Base64 decode back to binary
-    let data = BASE64.decode(&content)
+    let data = BASE64
+        .decode(&content)
         .context("Failed to base64-decode QR content")?;
 
     Ok(data)

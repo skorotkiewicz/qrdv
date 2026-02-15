@@ -2,7 +2,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "qrdv", version, about = "Encode data into QR code videos with optional encryption")]
+#[command(
+    name = "qrdv",
+    version,
+    about = "Encode data into QR code videos with optional encryption"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

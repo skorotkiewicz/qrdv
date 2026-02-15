@@ -1,14 +1,14 @@
 mod cli;
 mod crypto;
-mod encode;
 mod decode;
+mod encode;
+mod protocol;
 mod qr;
 mod video;
-mod protocol;
 
 use anyhow::Result;
-use cli::{Cli, Commands};
 use clap::Parser;
+use cli::{Cli, Commands};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

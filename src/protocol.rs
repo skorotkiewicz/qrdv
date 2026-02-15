@@ -1,3 +1,4 @@
+use anyhow::{Context, Result, bail};
 /// Wire protocol for encoding data into QR code frames.
 ///
 /// Each QR code contains a binary payload with the following structure:
@@ -22,10 +23,8 @@
 /// [chunk_crc: 4 bytes]     // CRC32 of this chunk's data
 /// [data: remaining bytes]
 /// ```
-
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Cursor, Read, Write};
-use anyhow::{Result, bail, Context};
 
 pub const MAGIC: &[u8; 4] = b"QRDV";
 pub const VERSION: u8 = 1;
@@ -82,7 +81,9 @@ impl Header {
         let mut cursor = Cursor::new(data);
 
         let mut magic = [0u8; 4];
-        cursor.read_exact(&mut magic).context("Reading magic bytes")?;
+        cursor
+            .read_exact(&mut magic)
+            .context("Reading magic bytes")?;
         if &magic != MAGIC {
             bail!("Invalid magic bytes: expected QRDV, got {:?}", magic);
         }
@@ -93,13 +94,23 @@ impl Header {
         }
 
         let flags = cursor.read_u8().context("Reading flags")?;
-        let total_frames = cursor.read_u32::<LittleEndian>().context("Reading total_frames")?;
-        let original_size = cursor.read_u64::<LittleEndian>().context("Reading original_size")?;
-        let checksum = cursor.read_u32::<LittleEndian>().context("Reading checksum")?;
+        let total_frames = cursor
+            .read_u32::<LittleEndian>()
+            .context("Reading total_frames")?;
+        let original_size = cursor
+            .read_u64::<LittleEndian>()
+            .context("Reading original_size")?;
+        let checksum = cursor
+            .read_u32::<LittleEndian>()
+            .context("Reading checksum")?;
 
-        let filename_len = cursor.read_u16::<LittleEndian>().context("Reading filename_len")? as usize;
+        let filename_len = cursor
+            .read_u16::<LittleEndian>()
+            .context("Reading filename_len")? as usize;
         let mut filename_bytes = vec![0u8; filename_len];
-        cursor.read_exact(&mut filename_bytes).context("Reading filename")?;
+        cursor
+            .read_exact(&mut filename_bytes)
+            .context("Reading filename")?;
         let filename = String::from_utf8(filename_bytes).context("Filename is not valid UTF-8")?;
 
         let (salt, nonce) = if flags & FLAG_ENCRYPTED != 0 {
@@ -142,8 +153,12 @@ impl DataFrame {
 
     pub fn deserialize(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
-        let frame_index = cursor.read_u32::<LittleEndian>().context("Reading frame_index")?;
-        let chunk_crc = cursor.read_u32::<LittleEndian>().context("Reading chunk_crc")?;
+        let frame_index = cursor
+            .read_u32::<LittleEndian>()
+            .context("Reading frame_index")?;
+        let chunk_crc = cursor
+            .read_u32::<LittleEndian>()
+            .context("Reading chunk_crc")?;
         let mut payload = Vec::new();
         cursor.read_to_end(&mut payload)?;
         Ok(DataFrame {

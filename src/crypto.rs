@@ -1,6 +1,6 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, OsRng},
 };
 use anyhow::Result;
 use argon2::Argon2;
@@ -33,7 +33,12 @@ pub fn generate_nonce() -> [u8; NONCE_LEN] {
 }
 
 /// Encrypt data using AES-256-GCM
-pub fn encrypt(data: &[u8], password: &str, salt: &[u8; SALT_LEN], nonce: &[u8; NONCE_LEN]) -> Result<Vec<u8>> {
+pub fn encrypt(
+    data: &[u8],
+    password: &str,
+    salt: &[u8; SALT_LEN],
+    nonce: &[u8; NONCE_LEN],
+) -> Result<Vec<u8>> {
     let key = derive_key(password, salt)?;
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;
@@ -45,7 +50,12 @@ pub fn encrypt(data: &[u8], password: &str, salt: &[u8; SALT_LEN], nonce: &[u8; 
 }
 
 /// Decrypt data using AES-256-GCM
-pub fn decrypt(ciphertext: &[u8], password: &str, salt: &[u8; SALT_LEN], nonce: &[u8; NONCE_LEN]) -> Result<Vec<u8>> {
+pub fn decrypt(
+    ciphertext: &[u8],
+    password: &str,
+    salt: &[u8; SALT_LEN],
+    nonce: &[u8; NONCE_LEN],
+) -> Result<Vec<u8>> {
     let key = derive_key(password, salt)?;
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| anyhow::anyhow!("Failed to create cipher: {}", e))?;

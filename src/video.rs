@@ -1,4 +1,4 @@
-use anyhow::{Result, Context, bail};
+use anyhow::{Context, Result, bail};
 use image::GrayImage;
 use std::path::Path;
 use std::process::Command;
@@ -41,18 +41,29 @@ pub fn encode_frames_to_video(
     // - Nearest-neighbor scaling would be ideal but ffmpeg default is fine for clean input
     let output = Command::new("ffmpeg")
         .args([
-            "-y",                          // overwrite output
-            "-framerate", &fps.to_string(),
-            "-i", input_pattern.to_str().unwrap(),
-            "-c:v", "libx264",
-            "-crf", "18",                 // high quality
-            "-preset", "slow",             // better compression
-            "-pix_fmt", "yuv420p",         // compatibility
-            "-vf", &format!("scale={}:{}:flags=neighbor", width, height),  // nearest-neighbor scaling
-            "-tune", "stillimage",         // optimize for static content
-            "-profile:v", "high",
-            "-level", "4.1",
-            "-movflags", "+faststart",     // streaming-friendly
+            "-y", // overwrite output
+            "-framerate",
+            &fps.to_string(),
+            "-i",
+            input_pattern.to_str().unwrap(),
+            "-c:v",
+            "libx264",
+            "-crf",
+            "18", // high quality
+            "-preset",
+            "slow", // better compression
+            "-pix_fmt",
+            "yuv420p", // compatibility
+            "-vf",
+            &format!("scale={}:{}:flags=neighbor", width, height), // nearest-neighbor scaling
+            "-tune",
+            "stillimage", // optimize for static content
+            "-profile:v",
+            "high",
+            "-level",
+            "4.1",
+            "-movflags",
+            "+faststart", // streaming-friendly
             output_path.to_str().unwrap(),
         ])
         .output()
@@ -67,18 +78,19 @@ pub fn encode_frames_to_video(
 }
 
 /// Extract frames from an MP4 video file as grayscale PNG images.
-pub fn decode_video_to_frames(
-    input_path: &Path,
-    frames_dir: &Path,
-) -> Result<u32> {
+pub fn decode_video_to_frames(input_path: &Path, frames_dir: &Path) -> Result<u32> {
     // First, get the total number of frames
     let probe_output = Command::new("ffprobe")
         .args([
-            "-v", "error",
+            "-v",
+            "error",
             "-count_frames",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=nb_read_frames",
-            "-of", "csv=p=0",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "csv=p=0",
             input_path.to_str().unwrap(),
         ])
         .output()
@@ -95,9 +107,12 @@ pub fn decode_video_to_frames(
     let output = Command::new("ffmpeg")
         .args([
             "-y",
-            "-i", input_path.to_str().unwrap(),
-            "-vf", "format=gray",          // convert to grayscale
-            "-vsync", "0",                  // preserve frame timing
+            "-i",
+            input_path.to_str().unwrap(),
+            "-vf",
+            "format=gray", // convert to grayscale
+            "-vsync",
+            "0", // preserve frame timing
             output_pattern.to_str().unwrap(),
         ])
         .output()
@@ -113,7 +128,7 @@ pub fn decode_video_to_frames(
 
 /// Load a grayscale image from a PNG file
 pub fn load_frame(path: &Path) -> Result<GrayImage> {
-    let img = image::open(path)
-        .with_context(|| format!("Failed to open frame: {}", path.display()))?;
+    let img =
+        image::open(path).with_context(|| format!("Failed to open frame: {}", path.display()))?;
     Ok(img.into_luma8())
 }

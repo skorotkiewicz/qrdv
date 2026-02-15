@@ -1,11 +1,11 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 
 use crate::cli::EncodeArgs;
 use crate::crypto;
-use crate::protocol::{DataFrame, Header, FLAG_COMPRESSED, FLAG_ENCRYPTED};
+use crate::protocol::{DataFrame, FLAG_COMPRESSED, FLAG_ENCRYPTED, Header};
 use crate::qr;
 use crate::video;
 
@@ -22,9 +22,12 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         .with_context(|| format!("Failed to read input file: {}", args.input.display()))?;
     let original_size = raw_data.len() as u64;
 
-    println!("  {} {} ({:.2} MB)", "size:".dimmed(),
+    println!(
+        "  {} {} ({:.2} MB)",
+        "size:".dimmed(),
         format!("{} bytes", original_size).white(),
-        original_size as f64 / 1_048_576.0);
+        original_size as f64 / 1_048_576.0
+    );
 
     // CRC32 of original data
     let checksum = crc32fast::hash(&raw_data);
@@ -34,9 +37,12 @@ pub fn run(args: EncodeArgs) -> Result<()> {
     let compressed = compress_data(&raw_data)?;
     let compressed_size = compressed.len();
     let compression_ratio = (1.0 - compressed_size as f64 / raw_data.len() as f64) * 100.0;
-    println!("  {} {} ({:.1}% reduction)", "compressed:".dimmed(),
+    println!(
+        "  {} {} ({:.1}% reduction)",
+        "compressed:".dimmed(),
         format!("{} bytes", compressed_size).white(),
-        compression_ratio);
+        compression_ratio
+    );
 
     let mut flags: u8 = FLAG_COMPRESSED;
     let mut salt = None;
@@ -51,21 +57,29 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         salt = Some(s);
         nonce = Some(n);
         flags |= FLAG_ENCRYPTED;
-        println!("  {} {}", "encrypted:".dimmed(),
-            format!("{} bytes", encrypted.len()).white());
+        println!(
+            "  {} {}",
+            "encrypted:".dimmed(),
+            format!("{} bytes", encrypted.len()).white()
+        );
         encrypted
     } else {
         compressed
     };
 
     // Get filename from input path
-    let filename = args.input
+    let filename = args
+        .input
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .unwrap_or_default();
 
     // Dynamically find the actual QR capacity
-    println!("  {} {}", "calibrate:".dimmed(), "testing QR capacity...".cyan());
+    println!(
+        "  {} {}",
+        "calibrate:".dimmed(),
+        "testing QR capacity...".cyan()
+    );
     let max_capacity = qr::find_max_capacity(ec_level);
     let data_frame_overhead = 8; // frame_index(4) + chunk_crc(4)
     let chunk_size = max_capacity - data_frame_overhead;
@@ -75,20 +89,40 @@ pub fn run(args: EncodeArgs) -> Result<()> {
     let total_frames = num_data_frames as u32 + 1; // +1 for header frame
 
     println!();
-    println!("  {} {}x{}", "resolution:".dimmed(),
-        width.to_string().white(), height.to_string().white());
-    println!("  {} {:?}", "ec level:".dimmed(),
-        format!("{:?}", args.ec_level).cyan());
-    println!("  {} {}", "qr capacity:".dimmed(),
-        format!("{} bytes", max_capacity).white());
-    println!("  {} {}", "chunk size:".dimmed(),
-        format!("{} bytes", chunk_size).white());
-    println!("  {} {} ({} header + {} data)", "total frames:".dimmed(),
+    println!(
+        "  {} {}x{}",
+        "resolution:".dimmed(),
+        width.to_string().white(),
+        height.to_string().white()
+    );
+    println!(
+        "  {} {}",
+        "ec level:".dimmed(),
+        format!("{:?}", args.ec_level).cyan()
+    );
+    println!(
+        "  {} {}",
+        "qr capacity:".dimmed(),
+        format!("{} bytes", max_capacity).white()
+    );
+    println!(
+        "  {} {}",
+        "chunk size:".dimmed(),
+        format!("{} bytes", chunk_size).white()
+    );
+    println!(
+        "  {} {} ({} header + {} data)",
+        "total frames:".dimmed(),
         total_frames.to_string().yellow(),
-        "1".white(), num_data_frames.to_string().white());
+        "1".white(),
+        num_data_frames.to_string().white()
+    );
     println!("  {} {}", "fps:".dimmed(), args.fps.to_string().white());
-    println!("  {} {}", "duration:".dimmed(),
-        format!("{:.1}s", total_frames as f64 / args.fps as f64).yellow());
+    println!(
+        "  {} {}",
+        "duration:".dimmed(),
+        format!("{:.1}s", total_frames as f64 / args.fps as f64).yellow()
+    );
 
     // Create temporary directory for frames
     let temp_dir = tempfile::tempdir().context("Failed to create temp directory")?;
@@ -112,13 +146,15 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         .context("Failed to generate header QR code")?;
 
     let header_path = frames_dir.join("frame_000001.png");
-    header_img.save(&header_path).context("Failed to save header frame")?;
+    header_img
+        .save(&header_path)
+        .context("Failed to save header frame")?;
 
     // Generate data frames with progress bar
     let pb = ProgressBar::new(num_data_frames as u64);
     pb.set_style(
         ProgressStyle::with_template(
-            "  [{bar:40.cyan/blue}] {pos}/{len} frames ({eta} remaining)"
+            "  [{bar:40.cyan/blue}] {pos}/{len} frames ({eta} remaining)",
         )?
         .progress_chars("━╸ "),
     );
@@ -141,14 +177,18 @@ pub fn run(args: EncodeArgs) -> Result<()> {
             .with_context(|| format!("Failed to generate QR code for frame {}", i + 1))?;
 
         let frame_path = frames_dir.join(format!("frame_{:06}.png", i + 2));
-        frame_img.save(&frame_path)
+        frame_img
+            .save(&frame_path)
             .with_context(|| format!("Failed to save frame {}", i + 1))?;
 
         pb.inc(1);
     }
     pb.finish_and_clear();
-    println!("  {} {}", "frames:".dimmed(),
-        format!("{} generated", total_frames).green());
+    println!(
+        "  {} {}",
+        "frames:".dimmed(),
+        format!("{} generated", total_frames).green()
+    );
 
     // Encode frames to video
     println!("  {} {}", "encode:".dimmed(), "video via ffmpeg...".cyan());
@@ -161,19 +201,29 @@ pub fn run(args: EncodeArgs) -> Result<()> {
 
     println!();
     println!("  {}", "done!".green().bold());
-    println!("  {} {}", "output:".dimmed(), args.output.display().to_string().white());
-    println!("  {} {} ({:.2} MB)", "video size:".dimmed(),
+    println!(
+        "  {} {}",
+        "output:".dimmed(),
+        args.output.display().to_string().white()
+    );
+    println!(
+        "  {} {} ({:.2} MB)",
+        "video size:".dimmed(),
         format!("{} bytes", output_size).white(),
-        output_size as f64 / 1_048_576.0);
-    println!("  {} {}", "overhead:".dimmed(),
-        format!("{:.1}x", output_size as f64 / original_size as f64).yellow());
+        output_size as f64 / 1_048_576.0
+    );
+    println!(
+        "  {} {}",
+        "overhead:".dimmed(),
+        format!("{:.1}x", output_size as f64 / original_size as f64).yellow()
+    );
 
     Ok(())
 }
 
 fn compress_data(data: &[u8]) -> Result<Vec<u8>> {
-    use flate2::write::DeflateEncoder;
     use flate2::Compression;
+    use flate2::write::DeflateEncoder;
     use std::io::Write;
 
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::best());
