@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
+use image::GrayImage;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 
@@ -124,13 +125,17 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         format!("{:.1}s", total_frames as f64 / args.fps as f64).yellow()
     );
 
-    // Create temporary directory for frames
-    let temp_dir = tempfile::tempdir().context("Failed to create temp directory")?;
-    let frames_dir = temp_dir.path();
-
-    // Generate header frame
+    // Generate all frames in memory
     println!();
-    println!("  {} {}", "generate:".dimmed(), "QR code frames...".cyan());
+    println!(
+        "  {} {}",
+        "generate:".dimmed(),
+        "QR code frames...".cyan()
+    );
+
+    let mut frames: Vec<GrayImage> = Vec::with_capacity(total_frames as usize);
+
+    // Header frame
     let header = Header {
         flags,
         total_frames,
@@ -144,13 +149,9 @@ pub fn run(args: EncodeArgs) -> Result<()> {
     let header_data = header.serialize()?;
     let header_img = qr::generate_qr_image(&header_data, ec_level, width, height)
         .context("Failed to generate header QR code")?;
+    frames.push(header_img);
 
-    let header_path = frames_dir.join("frame_000001.png");
-    header_img
-        .save(&header_path)
-        .context("Failed to save header frame")?;
-
-    // Generate data frames with progress bar
+    // Data frames with progress bar
     let pb = ProgressBar::new(num_data_frames as u64);
     pb.set_style(
         ProgressStyle::with_template(
@@ -176,11 +177,7 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         let frame_img = qr::generate_qr_image(&frame_data, ec_level, width, height)
             .with_context(|| format!("Failed to generate QR code for frame {}", i + 1))?;
 
-        let frame_path = frames_dir.join(format!("frame_{:06}.png", i + 2));
-        frame_img
-            .save(&frame_path)
-            .with_context(|| format!("Failed to save frame {}", i + 1))?;
-
+        frames.push(frame_img);
         pb.inc(1);
     }
     pb.finish_and_clear();
@@ -190,9 +187,13 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         format!("{} generated", total_frames).green()
     );
 
-    // Encode frames to video
-    println!("  {} {}", "encode:".dimmed(), "video via ffmpeg...".cyan());
-    video::encode_frames_to_video(frames_dir, &args.output, width, height, args.fps)?;
+    // Pipe frames directly to ffmpeg (no disk I/O)
+    println!(
+        "  {} {}",
+        "encode:".dimmed(),
+        "piping to ffmpeg...".cyan()
+    );
+    video::encode_frames_to_video(&frames, &args.output, width, height, args.fps)?;
 
     // Report output file size
     let output_size = fs::metadata(&args.output)

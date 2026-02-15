@@ -57,10 +57,6 @@ pub struct DecodeArgs {
     #[arg(short, long)]
     pub output: PathBuf,
 
-    /// Video resolution (must match encoding resolution)
-    #[arg(short, long, default_value = "720p")]
-    pub resolution: Resolution,
-
     /// Decryption key (must match encoding key)
     #[arg(short, long)]
     pub key: Option<String>,

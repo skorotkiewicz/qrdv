@@ -14,14 +14,24 @@ qrdv decode -i backup.mp4 -o backup.tar --key "secret"
 
 ## Options
 
+**Encode:**
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-i` | Input file | — |
-| `-o` | Output file | — |
+| `-o` | Output MP4 file | — |
 | `-r` | Resolution (`480p` `720p` `1080p` `1440p` `4k`) | `720p` |
 | `-k` | Encryption key (optional) | none |
 | `-e` | Error correction (`low` `medium` `quartile` `high`) | `high` |
 | `--fps` | Frames per second | `2` |
+
+**Decode:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-i` | Input MP4 file | — |
+| `-o` | Output file | — |
+| `-k` | Decryption key (if encrypted) | none |
 
 Higher error correction = survives heavier compression, but produces longer videos.
 

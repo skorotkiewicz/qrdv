@@ -15,33 +15,27 @@ pub fn run(args: DecodeArgs) -> Result<()> {
 
     println!("  {} {}", "input:".dimmed(), args.input.display());
 
-    // Create temporary directory for extracted frames
-    let temp_dir = tempfile::tempdir().context("Failed to create temp directory")?;
-    let frames_dir = temp_dir.path();
-
-    // Extract frames from video
+    // Extract all frames from video directly via pipe (no temp files)
     println!(
         "  {} {}",
         "extract:".dimmed(),
-        "frames via ffmpeg...".cyan()
+        "piping from ffmpeg...".cyan()
     );
-    let frame_count = video::decode_video_to_frames(&args.input, frames_dir)?;
+    let frames = video::decode_video_to_frames(&args.input)?;
     println!(
         "  {} {}",
         "frames:".dimmed(),
-        format!("{} extracted", frame_count).white()
+        format!("{} extracted", frames.len()).white()
     );
 
-    if frame_count == 0 {
+    if frames.is_empty() {
         bail!("No frames found in video");
     }
 
     // Read header frame (first frame)
     println!("  {} {}", "header:".dimmed(), "reading...".cyan());
-    let header_path = frames_dir.join("frame_000001.png");
-    let header_img = video::load_frame(&header_path).context("Failed to load header frame")?;
     let header_data =
-        qr::decode_qr_image(&header_img).context("Failed to decode header QR code")?;
+        qr::decode_qr_image(&frames[0]).context("Failed to decode header QR code")?;
     let header = Header::deserialize(&header_data).context("Failed to parse header")?;
 
     println!("  {} {}", "filename:".dimmed(), header.filename.white());
@@ -88,7 +82,7 @@ pub fn run(args: DecodeArgs) -> Result<()> {
         );
     }
 
-    // Read data frames
+    // Decode data frames
     println!();
     println!(
         "  {} {}",
@@ -108,15 +102,15 @@ pub fn run(args: DecodeArgs) -> Result<()> {
     let mut chunks: Vec<Option<Vec<u8>>> = vec![None; num_data_frames];
     let mut errors = Vec::new();
 
-    for i in 0..num_data_frames {
-        let frame_path = frames_dir.join(format!("frame_{:06}.png", i + 2));
-        match decode_data_frame(&frame_path) {
+    for (i, frame) in frames[1..].iter().enumerate() {
+        match qr::decode_qr_image(frame)
+            .and_then(|data| DataFrame::deserialize(&data))
+        {
             Ok(data_frame) => {
                 let idx = data_frame.frame_index as usize;
                 if idx == 0 || idx > num_data_frames {
                     errors.push(format!("Frame {} has invalid index {}", i + 2, idx));
                 } else {
-                    // Verify chunk CRC
                     let computed_crc = crc32fast::hash(&data_frame.data);
                     if computed_crc != data_frame.chunk_crc {
                         errors.push(format!(
@@ -260,12 +254,6 @@ pub fn run(args: DecodeArgs) -> Result<()> {
     );
 
     Ok(())
-}
-
-fn decode_data_frame(frame_path: &std::path::Path) -> Result<DataFrame> {
-    let img = video::load_frame(frame_path)?;
-    let data = qr::decode_qr_image(&img)?;
-    DataFrame::deserialize(&data)
 }
 
 fn decompress_data(data: &[u8]) -> Result<Vec<u8>> {
