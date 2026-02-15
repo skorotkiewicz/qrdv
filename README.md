@@ -59,6 +59,12 @@ MP4 → extract frames → decode QR → reassemble → decrypt → decompress �
 cargo build --release
 ```
 
+## Tests
+
+```bash
+chmod +x tests.sh && bash tests.sh
+```
+
 ## License
 
 MIT
