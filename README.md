@@ -23,6 +23,7 @@ qrdv decode -i backup.mp4 -o backup.tar --key "secret"
 | `-r` | Resolution (`480p` `720p` `1080p` `1440p` `4k`) | `720p` |
 | `-k` | Encryption key (optional) | none |
 | `-e` | Error correction (`low` `medium` `quartile` `high`) | `high` |
+| `-m` | Processing mode (`parallel` `standard`) | `parallel` |
 | `--fps` | Frames per second | `2` |
 
 **Decode:**
@@ -32,6 +33,7 @@ qrdv decode -i backup.mp4 -o backup.tar --key "secret"
 | `-i` | Input MP4 file | — |
 | `-o` | Output file | — |
 | `-k` | Decryption key (if encrypted) | none |
+| `-m` | Processing mode (`parallel` `standard`) | `parallel` |
 
 Higher error correction = survives heavier compression, but produces longer videos.
 

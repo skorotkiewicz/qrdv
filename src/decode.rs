@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::fs;
+use std::sync::Mutex;
 
 use crate::cli::DecodeArgs;
 use crate::crypto;
@@ -83,11 +85,14 @@ pub fn run(args: DecodeArgs) -> Result<()> {
     }
 
     // Decode data frames
+    let is_parallel = args.mode == crate::cli::ProcessingMode::Parallel;
+    let mode_label = if is_parallel { "parallel" } else { "standard" };
+
     println!();
     println!(
         "  {} {}",
         "decode:".dimmed(),
-        "reading data frames...".cyan()
+        format!("reading data frames ({})...", mode_label).cyan()
     );
     let num_data_frames = (header.total_frames - 1) as usize;
 
@@ -99,39 +104,99 @@ pub fn run(args: DecodeArgs) -> Result<()> {
         .progress_chars("━╸ "),
     );
 
-    let mut chunks: Vec<Option<Vec<u8>>> = vec![None; num_data_frames];
-    let mut errors = Vec::new();
+    let mut ordered_chunks: Vec<Option<Vec<u8>>> = vec![None; num_data_frames];
+    let errors;
 
-    for (i, frame) in frames[1..].iter().enumerate() {
-        match qr::decode_qr_image(frame)
-            .and_then(|data| DataFrame::deserialize(&data))
-        {
-            Ok(data_frame) => {
-                let idx = data_frame.frame_index as usize;
-                if idx == 0 || idx > num_data_frames {
-                    errors.push(format!("Frame {} has invalid index {}", i + 2, idx));
-                } else {
-                    let computed_crc = crc32fast::hash(&data_frame.data);
-                    if computed_crc != data_frame.chunk_crc {
-                        errors.push(format!(
-                            "Frame {} (index {}) CRC mismatch: expected {:08x}, got {:08x}",
-                            i + 2,
-                            idx,
-                            data_frame.chunk_crc,
-                            computed_crc
-                        ));
-                    } else {
-                        chunks[idx - 1] = Some(data_frame.data);
+    if is_parallel {
+        let par_errors = Mutex::new(Vec::new());
+        let decoded: Vec<Option<(usize, Vec<u8>)>> = frames[1..]
+            .par_iter()
+            .enumerate()
+            .map(|(i, frame)| {
+                let result = qr::decode_qr_image(frame)
+                    .and_then(|data| DataFrame::deserialize(&data));
+
+                pb.inc(1);
+
+                match result {
+                    Ok(data_frame) => {
+                        let idx = data_frame.frame_index as usize;
+                        if idx == 0 || idx > num_data_frames {
+                            par_errors
+                                .lock()
+                                .unwrap()
+                                .push(format!("Frame {} has invalid index {}", i + 2, idx));
+                            return None;
+                        }
+
+                        let computed_crc = crc32fast::hash(&data_frame.data);
+                        if computed_crc != data_frame.chunk_crc {
+                            par_errors.lock().unwrap().push(format!(
+                                "Frame {} (index {}) CRC mismatch: expected {:08x}, got {:08x}",
+                                i + 2,
+                                idx,
+                                data_frame.chunk_crc,
+                                computed_crc
+                            ));
+                            return None;
+                        }
+
+                        Some((idx, data_frame.data))
+                    }
+                    Err(e) => {
+                        par_errors
+                            .lock()
+                            .unwrap()
+                            .push(format!("Frame {}: {}", i + 2, e));
+                        None
                     }
                 }
-            }
-            Err(e) => {
-                errors.push(format!("Frame {}: {}", i + 2, e));
-            }
+            })
+            .collect();
+
+        pb.finish_and_clear();
+
+        for (idx, data) in decoded.into_iter().flatten() {
+            ordered_chunks[idx - 1] = Some(data);
         }
-        pb.inc(1);
+
+        errors = par_errors.into_inner().unwrap();
+    } else {
+        let mut seq_errors = Vec::new();
+
+        for (i, frame) in frames[1..].iter().enumerate() {
+            match qr::decode_qr_image(frame)
+                .and_then(|data| DataFrame::deserialize(&data))
+            {
+                Ok(data_frame) => {
+                    let idx = data_frame.frame_index as usize;
+                    if idx == 0 || idx > num_data_frames {
+                        seq_errors.push(format!("Frame {} has invalid index {}", i + 2, idx));
+                    } else {
+                        let computed_crc = crc32fast::hash(&data_frame.data);
+                        if computed_crc != data_frame.chunk_crc {
+                            seq_errors.push(format!(
+                                "Frame {} (index {}) CRC mismatch: expected {:08x}, got {:08x}",
+                                i + 2,
+                                idx,
+                                data_frame.chunk_crc,
+                                computed_crc
+                            ));
+                        } else {
+                            ordered_chunks[idx - 1] = Some(data_frame.data);
+                        }
+                    }
+                }
+                Err(e) => {
+                    seq_errors.push(format!("Frame {}: {}", i + 2, e));
+                }
+            }
+            pb.inc(1);
+        }
+        pb.finish_and_clear();
+
+        errors = seq_errors;
     }
-    pb.finish_and_clear();
 
     // Report errors
     if !errors.is_empty() {
@@ -159,7 +224,7 @@ pub fn run(args: DecodeArgs) -> Result<()> {
     }
 
     // Check for missing frames
-    let missing: Vec<usize> = chunks
+    let missing: Vec<usize> = ordered_chunks
         .iter()
         .enumerate()
         .filter(|(_, c)| c.is_none())
@@ -181,7 +246,7 @@ pub fn run(args: DecodeArgs) -> Result<()> {
         "joining chunks...".cyan()
     );
     let mut payload = Vec::new();
-    for chunk in chunks {
+    for chunk in ordered_chunks {
         payload.extend(chunk.unwrap());
     }
     println!(

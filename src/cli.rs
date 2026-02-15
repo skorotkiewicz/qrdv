@@ -45,6 +45,10 @@ pub struct EncodeArgs {
     /// Frames per second (lower = smaller file, but more frames needed)
     #[arg(long, default_value = "2")]
     pub fps: u32,
+
+    /// Processing mode
+    #[arg(short, long, default_value = "parallel")]
+    pub mode: ProcessingMode,
 }
 
 #[derive(Parser, Clone)]
@@ -60,6 +64,10 @@ pub struct DecodeArgs {
     /// Decryption key (must match encoding key)
     #[arg(short, long)]
     pub key: Option<String>,
+
+    /// Processing mode
+    #[arg(short, long, default_value = "parallel")]
+    pub mode: ProcessingMode,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -114,4 +122,12 @@ impl EcLevel {
             EcLevel::High => qrcode::EcLevel::H,
         }
     }
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq)]
+pub enum ProcessingMode {
+    /// Sequential frame processing
+    Standard,
+    /// Parallel frame processing using all CPU cores
+    Parallel,
 }

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
-use image::GrayImage;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::fs;
 
 use crate::cli::EncodeArgs;
@@ -125,17 +125,17 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         format!("{:.1}s", total_frames as f64 / args.fps as f64).yellow()
     );
 
-    // Generate all frames in memory
+    // Generate header frame
+    let is_parallel = args.mode == crate::cli::ProcessingMode::Parallel;
+    let mode_label = if is_parallel { "parallel" } else { "standard" };
+
     println!();
     println!(
         "  {} {}",
         "generate:".dimmed(),
-        "QR code frames...".cyan()
+        format!("QR code frames ({})...", mode_label).cyan()
     );
 
-    let mut frames: Vec<GrayImage> = Vec::with_capacity(total_frames as usize);
-
-    // Header frame
     let header = Header {
         flags,
         total_frames,
@@ -149,9 +149,8 @@ pub fn run(args: EncodeArgs) -> Result<()> {
     let header_data = header.serialize()?;
     let header_img = qr::generate_qr_image(&header_data, ec_level, width, height)
         .context("Failed to generate header QR code")?;
-    frames.push(header_img);
 
-    // Data frames with progress bar
+    // Generate data frames
     let pb = ProgressBar::new(num_data_frames as u64);
     pb.set_style(
         ProgressStyle::with_template(
@@ -160,7 +159,7 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         .progress_chars("━╸ "),
     );
 
-    for i in 0..num_data_frames {
+    let generate_frame = |i: usize| -> Result<image::GrayImage> {
         let start = i * chunk_size;
         let end = ((i + 1) * chunk_size).min(payload.len());
         let chunk = &payload[start..end];
@@ -177,10 +176,24 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         let frame_img = qr::generate_qr_image(&frame_data, ec_level, width, height)
             .with_context(|| format!("Failed to generate QR code for frame {}", i + 1))?;
 
-        frames.push(frame_img);
         pb.inc(1);
-    }
+        Ok(frame_img)
+    };
+
+    let data_frames: Result<Vec<_>> = if is_parallel {
+        (0..num_data_frames).into_par_iter().map(generate_frame).collect()
+    } else {
+        (0..num_data_frames).map(generate_frame).collect()
+    };
+
+    let data_frames = data_frames?;
     pb.finish_and_clear();
+
+    // Combine header + data frames in order
+    let mut frames = Vec::with_capacity(total_frames as usize);
+    frames.push(header_img);
+    frames.extend(data_frames);
+
     println!(
         "  {} {}",
         "frames:".dimmed(),
