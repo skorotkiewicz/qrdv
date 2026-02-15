@@ -1,0 +1,29 @@
+[package]
+name = "qrdv"
+version = "0.1.0"
+edition = "2024"
+description = "Encode any data into QR code videos with optional encryption"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+qrcode = "0.14"
+image = "0.25"
+rqrr = "0.8"
+aes-gcm = "0.10"
+argon2 = "0.5"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+indicatif = { version = "0.17", features = ["rayon"] }
+rayon = "1.10"
+anyhow = "1"
+byteorder = "1"
+crc32fast = "1"
+flate2 = "1"
+tempfile = "3"
+colored = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
