@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::fs;
 
 use crate::cli::EncodeArgs;
@@ -124,13 +125,17 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         format!("{:.1}s", total_frames as f64 / args.fps as f64).yellow()
     );
 
-    // Create temporary directory for frames
-    let temp_dir = tempfile::tempdir().context("Failed to create temp directory")?;
-    let frames_dir = temp_dir.path();
-
     // Generate header frame
+    let is_parallel = args.mode == crate::cli::ProcessingMode::Parallel;
+    let mode_label = if is_parallel { "parallel" } else { "standard" };
+
     println!();
-    println!("  {} {}", "generate:".dimmed(), "QR code frames...".cyan());
+    println!(
+        "  {} {}",
+        "generate:".dimmed(),
+        format!("QR code frames ({})...", mode_label).cyan()
+    );
+
     let header = Header {
         flags,
         total_frames,
@@ -145,12 +150,7 @@ pub fn run(args: EncodeArgs) -> Result<()> {
     let header_img = qr::generate_qr_image(&header_data, ec_level, width, height)
         .context("Failed to generate header QR code")?;
 
-    let header_path = frames_dir.join("frame_000001.png");
-    header_img
-        .save(&header_path)
-        .context("Failed to save header frame")?;
-
-    // Generate data frames with progress bar
+    // Generate data frames
     let pb = ProgressBar::new(num_data_frames as u64);
     pb.set_style(
         ProgressStyle::with_template(
@@ -159,7 +159,7 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         .progress_chars("━╸ "),
     );
 
-    for i in 0..num_data_frames {
+    let generate_frame = |i: usize| -> Result<image::GrayImage> {
         let start = i * chunk_size;
         let end = ((i + 1) * chunk_size).min(payload.len());
         let chunk = &payload[start..end];
@@ -176,23 +176,37 @@ pub fn run(args: EncodeArgs) -> Result<()> {
         let frame_img = qr::generate_qr_image(&frame_data, ec_level, width, height)
             .with_context(|| format!("Failed to generate QR code for frame {}", i + 1))?;
 
-        let frame_path = frames_dir.join(format!("frame_{:06}.png", i + 2));
-        frame_img
-            .save(&frame_path)
-            .with_context(|| format!("Failed to save frame {}", i + 1))?;
-
         pb.inc(1);
-    }
+        Ok(frame_img)
+    };
+
+    let data_frames: Result<Vec<_>> = if is_parallel {
+        (0..num_data_frames).into_par_iter().map(generate_frame).collect()
+    } else {
+        (0..num_data_frames).map(generate_frame).collect()
+    };
+
+    let data_frames = data_frames?;
     pb.finish_and_clear();
+
+    // Combine header + data frames in order
+    let mut frames = Vec::with_capacity(total_frames as usize);
+    frames.push(header_img);
+    frames.extend(data_frames);
+
     println!(
         "  {} {}",
         "frames:".dimmed(),
         format!("{} generated", total_frames).green()
     );
 
-    // Encode frames to video
-    println!("  {} {}", "encode:".dimmed(), "video via ffmpeg...".cyan());
-    video::encode_frames_to_video(frames_dir, &args.output, width, height, args.fps)?;
+    // Pipe frames directly to ffmpeg (no disk I/O)
+    println!(
+        "  {} {}",
+        "encode:".dimmed(),
+        "piping to ffmpeg...".cyan()
+    );
+    video::encode_frames_to_video(&frames, &args.output, width, height, args.fps)?;
 
     // Report output file size
     let output_size = fs::metadata(&args.output)
